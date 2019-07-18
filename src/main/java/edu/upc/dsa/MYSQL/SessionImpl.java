@@ -1,8 +1,9 @@
 package edu.upc.dsa.MYSQL;
 
-import edu.upc.dsa.Exceptions.UserAlreadyExistsException;
+import edu.upc.dsa.exceptions.UserAlreadyExistsException;
 
-import edu.upc.dsa.models.Usuario;
+import edu.upc.dsa.exceptions.UserNotFoundException;
+import edu.upc.dsa.models.User;
 
 import org.apache.log4j.Logger;
 
@@ -10,7 +11,6 @@ import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 import static java.sql.Types.*;
@@ -22,8 +22,8 @@ public class SessionImpl implements Session {
 
     SessionImpl() {
         try {
-            Class.forName("com.mysql.jdbc.Driver").newInstance();
-            this.connection = DriverManager.getConnection("jdbc:mysql://localhost/dsa", "root", "divisiondehonor8");
+            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+            this.connection = DriverManager.getConnection("jdbc:mysql://localhost/pochaDB?useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC", "root", "carlosandro");
             log.info("Connected to db");
         } catch (Exception e) {
             log.error("Error exception");
@@ -33,8 +33,8 @@ public class SessionImpl implements Session {
 
     public void save(Object entity) throws Exception {
 
-        if (entity instanceof Usuario)
-            if (!find(Usuario.class, -1, entity.getClass().getMethod("getUsername").invoke(entity).toString()).isEmpty()) throw new UserAlreadyExistsException();
+        if (entity instanceof User)
+            if (!find(User.class, -1, entity.getClass().getMethod("getUsername").invoke(entity).toString()).isEmpty()) throw new UserAlreadyExistsException();
 
         Field[] fields = entity.getClass().getDeclaredFields();
         StringBuilder sb = new StringBuilder();
@@ -69,8 +69,14 @@ public class SessionImpl implements Session {
         prep.close();
     }
 
-    public Usuario getByUsername(String username) throws Exception {
-           return (Usuario) find(Usuario.class, -1, username).get(0);
+    public User getByUsername(String username) throws Exception {
+        User u = null;
+        try {
+            u = (User) find(User.class, -1, username).get(0);
+        } catch (Exception e) {
+            throw new UserNotFoundException();
+        }
+        return u;
     }
 
     public Object get(Class theClass, int id) throws Exception {
@@ -106,11 +112,6 @@ public class SessionImpl implements Session {
         prep.execute();
         log.info("que sale:" + prep);
         log.info("query: " + query);
-    }
-
-    @Override
-    public List<Usuario> usuariosPartida(int idPartida) {
-        return null;
     }
 
     public void close() throws Exception {

@@ -1,4 +1,4 @@
-package edu.upc.dsa.Exceptions;
+package edu.upc.dsa.exceptions;
 
 public class UserAlreadyExistsException extends Exception {
 }

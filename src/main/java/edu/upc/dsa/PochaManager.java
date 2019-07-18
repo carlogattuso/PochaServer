@@ -1,24 +1,17 @@
 package edu.upc.dsa;
 
-import edu.upc.dsa.Exceptions.UserNotFoundException;
-import edu.upc.dsa.models.PartidaPocha;
-import edu.upc.dsa.models.PartidaTO;
-import edu.upc.dsa.models.PartidaUsuario;
-import edu.upc.dsa.models.Usuario;
+import edu.upc.dsa.models.*;
 
 import java.util.List;
 
 public interface PochaManager {
 
-    Usuario añadirUsuarios (String nombre) throws Exception;
-    Usuario getUsuario (String nombre) throws UserNotFoundException;
-    PartidaPocha añadirPartida (String nombre, int numJugadores) throws Exception;
-    PartidaUsuario añadirPartidaUsuario (String nombrePartida, int idUsuario, int puntuacion) throws Exception;
-    List<Usuario> getUsuarios() throws Exception;
-    PartidaTO getPartida(String nombre) throws Exception;
-    List<PartidaPocha> getPartidas() throws Exception;
+    User newUser (String username, String password, String name, String surname, String mail, int age) throws Exception;
+    UserJava getUser (String username, String password) throws Exception;
+    GameJava newGame (String gameType, String date, String winner, List<Player> players) throws Exception;
+    GameJava getLastGame (String username);
+    List<GameJava> getGamesByUser (String username);
+    List<GameJava> getGamesByUserAndGame (String username, String gameType);
+    int userSize();
 
-
-
-    int size();
 }
