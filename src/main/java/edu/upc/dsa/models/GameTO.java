@@ -3,27 +3,21 @@ package edu.upc.dsa.models;
 import java.util.LinkedList;
 import java.util.List;
 
-public class Game {
-    private int id;
+public class GameTO {
+
     private String gameType;
     private String date;
     private String winner;
+    private List<Player> players = new LinkedList<>();
 
-    public Game() {
+    public GameTO() {
     }
 
-    public Game(String gameType, String date, String winner) {
+    public GameTO(String gameType, String date, String winner, List<Player> players) {
         this.gameType = gameType;
         this.date = date;
         this.winner = winner;
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
+        this.players = players;
     }
 
     public String getGameType() {
@@ -50,8 +44,11 @@ public class Game {
         this.winner = winner;
     }
 
-    @Override
-    public String toString() {
-        return "Game [id=" + id + ", gameType=" + gameType + ", date=" + date + ", winner=" + winner + "]";
+    public List<Player> getPlayers() {
+        return players;
+    }
+
+    public void setPlayers(List<Player> players) {
+        this.players = players;
     }
 }

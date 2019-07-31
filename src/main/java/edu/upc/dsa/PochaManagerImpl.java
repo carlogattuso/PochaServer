@@ -1,21 +1,23 @@
 package edu.upc.dsa;
 
-import edu.upc.dsa.exceptions.PasswordNotMatchException;
-import edu.upc.dsa.exceptions.UserAlreadyExistsException;
+import edu.upc.dsa.exceptions.*;
 import edu.upc.dsa.MYSQL.Factory;
 import edu.upc.dsa.MYSQL.Session;
-import edu.upc.dsa.exceptions.UserNotFoundException;
 import edu.upc.dsa.models.*;
 import edu.upc.dsa.util.RandomUtils;
 import org.apache.log4j.Logger;
 
+import javax.jws.soap.SOAPBinding;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 public class PochaManagerImpl implements PochaManager {
     private static PochaManager instance;
 
     private HashMap<String,UserJava> users;
+    private Boolean upToDate = false;
 
     final static Logger logger = Logger.getLogger(PochaManagerImpl.class);
 
@@ -30,6 +32,7 @@ public class PochaManagerImpl implements PochaManager {
         return instance;
     }
 
+    @Override
     public int userSize() {
         int ret = this.users.size();
         logger.info("Users size " + ret);
@@ -44,7 +47,7 @@ public class PochaManagerImpl implements PochaManager {
         try {
             this.checkUser(username);
             session = Factory.getSession();
-            u = new User(0,username, password, name, surname, mail, age);
+            u = new User(username, password, name, surname, mail, age);
             session.save(u);
             log.info("Registered: " + u);
             this.getUser(u.getUsername(),u.getPassword());
@@ -96,19 +99,69 @@ public class PochaManagerImpl implements PochaManager {
     }
 
     @Override
-    public GameJava newGame(String gameType, String date, String winner, List<Player> players) throws Exception {
+    public List<String> getAllUsers() throws Exception {
         Session session = null;
-        GameJava gameJava;
+        List<String> allUsers = new LinkedList<>();
+
+        if(this.upToDate){
+            Set<String> stringList = this.users.keySet();
+            for(String username : stringList){
+                UserJava user = this.getUser(username,"admin");
+                allUsers.add(user.getUsername());
+            }
+        }
+        else{
+            session = Factory.getSession();
+            List<Object> users;
+            users =  session.findAll(User.class);
+            for(Object o : users){
+                User u = (User) o;
+                allUsers.add(u.getUsername());
+                this.upToDate = true;
+            }
+        }
+        return allUsers;
+    }
+
+    @Override
+    public List<UsernameTO> searchUser(String piece) throws Exception {
+        Session session = null;
+        List<String> names = new LinkedList<>();
+        List<UsernameTO> usernames = new LinkedList<>();
+
         try {
             session = Factory.getSession();
-            Game game = new Game(gameType,date,winner);
+            names = session.searchUser(piece);
+            for(String s : names){
+                usernames.add(new UsernameTO(s));
+            }
+        } catch (EmptyUserListException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        } finally {
+            if (session != null) session.close();
+        }
+        return usernames;
+    }
+
+    @Override
+    public Game newGame(String gameType, String date, String winner, List<Player> players) throws Exception {
+        Session session = null;
+        Game game = null;
+
+        try {
+            session = Factory.getSession();
+            game = new Game(gameType,date,winner);
             session.save(game);
-            gameJava = new GameJava(0,gameType,date,winner);
+            int id = session.findLastId(Game.class);
+            game = (Game) session.get(Game.class,id);
             logger.info("New Game: " + game.toString());
             for(Player p : players){
-                gameJava.addPlayer(p);
                 UserJava userJava = this.getUser(p.getUsername(),"admin");
-                Relation relation = new Relation(userJava.getId(),gameJava.getId(),p.getPoints());
+                userJava.setUpToDate(false);
+                Relation relation = new Relation(userJava.getId(),id,p.getPoints());
                 session.save(relation);
             }
         } catch (Exception e) {
@@ -117,22 +170,58 @@ public class PochaManagerImpl implements PochaManager {
         } finally {
             if (session != null) session.close();
         }
-        return gameJava;
+        return game;
     }
 
     @Override
-    public GameJava getLastGame(String username) {
-        return null;
+    public List<GameTO> getGamesByUser(String username) throws Exception {
+        Session session = null;
+        UserJava user = null;
+        GameJava gameJava = null;
+        List<Game> gamesNoPlayers = new LinkedList<>();
+        List<Player> players = new LinkedList<>();
+
+        user = this.getUser(username,"admin");
+        logger.info("User status: "+user.getUpToDate());
+        if(!user.getUpToDate()) {
+            try {
+                logger.info("getGames: Searching on DB...");
+                session = Factory.getSession();
+                user.getGames().clear();
+                gamesNoPlayers = session.findGamesIdByUserId(user.getId());
+                for (Game g : gamesNoPlayers) {
+                    gameJava = new GameJava(g.getId(), g.getGameType(), g.getDate(), g.getWinner());
+                    players = session.findPlayersByGameId(g.getId());
+                    for (Player p : players) {
+                        gameJava.addPlayer(p);
+                    }
+                    logger.info("Game prepared: " + gameJava.toString());
+                    user.addGame(gameJava);
+                }
+                user.setUpToDate(true);
+            } catch (EmptyGameListException e) {
+                throw e;
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw e;
+            } finally {
+                if (session != null) session.close();
+            }
+        }
+        return this.passGameJavaToGameTO(user.getGames());
     }
 
     @Override
-    public List<GameJava> getGamesByUser(String username) {
-        return null;
-    }
-
-    @Override
-    public List<GameJava> getGamesByUserAndGame(String username, String gameType) {
-        return null;
+    public List<GameTO> getGamesByUserAndGame(String username, String gameType) throws Exception{
+        List<GameTO> games = this.getGamesByUser(username);
+        List<GameTO> gamesOrderedByGameType = new LinkedList<>();
+        for(GameTO g : games){
+            if(g.getGameType().equals(gameType)){
+                gamesOrderedByGameType.add(g);
+            }
+        }
+        if(gamesOrderedByGameType.size()==0) throw new EmptyGameListException();
+        return gamesOrderedByGameType;
     }
 
     //Internal methods
@@ -148,153 +237,14 @@ public class PochaManagerImpl implements PochaManager {
         if(!u.getPassword().equals(password)) throw new PasswordNotMatchException();
     }
 
-    /*@Override
-    public User newUser(String nombre) throws Exception {
-        Session session = null;
-        User u = usuarios.get(nombre);
+    public List<GameTO> passGameJavaToGameTO (List<GameJava> javaGames) {
+        GameTO gameTO = null;
+        List<GameTO> TOgames = new LinkedList<>();
 
-        if (u == null) {
-            try {
-                u=new User(nombre);
-                session = Factory.getSession();
-                session.save(u);
-
-                log.info("User insert: " + u);
-                this.usuarios.put(nombre, u);
-            } catch (UserAlreadyExistsException e) {
-                log.info("User already exists");
-                throw e;
-            } catch (Exception e) {
-                e.printStackTrace();
-                throw e;
-            } finally {
-                if (session != null) session.close();
-            }
-            logger.info("New user: " + u.toString());
-            return u;
-        } else throw new UserAlreadyExistsException();
-    }
-    */
-    /*@Override
-    public Usuario getUsuario(String nombre) throws UserNotFoundException{
-        Usuario u = usuarios.get(nombre);
-        if(u==null) throw new UserNotFoundException();
-        return u;
-    }
-
-    @Override
-    public PartidaPocha añadirPartida(String nombre, int numJugadores) throws Exception {
-        Session session = null;
-        PartidaPocha partidaPocha = partidas.get(nombre);
-        if (partidaPocha == null) {
-            partidaPocha = new PartidaPocha(nombre, numJugadores);
-            try {
-                session = Factory.getSession();
-                session.save(partidaPocha);
-                partidas.put(partidaPocha.getNombre(),partidaPocha);
-                log.info("Partida insert: " + partidaPocha);
-            } catch (Exception e) {
-                e.printStackTrace();
-                throw e;
-            } finally {
-                if (session != null) session.close();
-            }
-            logger.info("New user: " + partidaPocha.toString());
-            return partidaPocha;
-        } else return null;
-    }
-
-    @Override
-    public PartidaUsuario añadirPartidaUsuario(String nombre, int idUsuario, int puntuacion) throws Exception {
-        Session session = null;
-        PartidaPocha partidaPocha = partidas.get(nombre);
-        PartidaUsuario partidaUsuario = new PartidaUsuario(partidaPocha.getId(),idUsuario,puntuacion);
-        try {
-            session = Factory.getSession();
-            session.save(partidaUsuario);
-
-            log.info("Partida insert: " + partidaUsuario);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        } finally {
-            if (session != null) session.close();
+        for(GameJava g : javaGames){
+            gameTO = new GameTO(g.getGameType(),g.getDate(),g.getWinner(),g.getPlayers());
+            TOgames.add(gameTO);
         }
-        logger.info("New user: " + partidaUsuario.toString());
-        return partidaUsuario;
+        return TOgames;
     }
-
-    @Override
-    public List<Usuario> getUsuarios() throws Exception {
-        Session session = null;
-        try {
-            List<Usuario> listUsers = new ArrayList<>();
-            session = Factory.getSession();
-            List<Object> lista = session.findAll(Usuario.class);
-            for (Object object : lista) {
-                if (object instanceof Usuario) {
-                    Usuario CP = (Usuario) object;
-                    usuarios.put(CP.getNombre(),CP);
-                    listUsers.add(CP);
-                }
-            }
-            return listUsers;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        } finally {
-            if (session != null) session.close();
-        }
-    }
-
-    @Override
-    public PartidaTO getPartida(String nombre) throws Exception {
-        Session session = null;
-        PartidaPocha partidaPocha = partidas.get(nombre);
-        if (partidaPocha != null) {
-            try {
-                List<UsuarioTO> listUsers = new ArrayList<>();
-                session = Factory.getSession();
-                List<Object> lista = session.find(PartidaUsuario.class,partidaPocha.getId(),partidaPocha.getNombre());
-                for (Object object : lista) {
-                    if (object instanceof PartidaUsuario) {
-                        Usuario usuario = (Usuario) session.get(Usuario.class,((PartidaUsuario) object).getId());
-                        UsuarioTO usuarioTO = new UsuarioTO(usuario.getNombre(),((PartidaUsuario) object).getPuntuacion());
-                        listUsers.add(usuarioTO);
-                    }
-                }
-                PartidaTO partidaTO = new PartidaTO(nombre,listUsers.size(),listUsers);
-                return partidaTO;
-            } catch (Exception e) {
-                e.printStackTrace();
-                throw e;
-            } finally {
-                if (session != null) session.close();
-            }
-        }
-        return null;
-    }
-
-    @Override
-    public List<PartidaPocha> getPartidas() throws Exception {
-        Session session = null;
-        try {
-            List<PartidaPocha> listPartidas = new ArrayList<>();
-            session = Factory.getSession();
-            List<Object> lista = session.findAll(PartidaPocha.class);
-            for (Object object : lista) {
-                if (object instanceof PartidaPocha) {
-                    PartidaPocha CP = (PartidaPocha) object;
-                    partidas.put(CP.getNombre(),CP);
-                    listPartidas.add(CP);
-                }
-            }
-            return listPartidas;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        } finally {
-            if (session != null) session.close();
-        }    }
-        */
 }

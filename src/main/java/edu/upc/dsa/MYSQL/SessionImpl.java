@@ -1,16 +1,23 @@
 package edu.upc.dsa.MYSQL;
 
+import edu.upc.dsa.exceptions.EmptyGameListException;
+import edu.upc.dsa.exceptions.EmptyUserListException;
 import edu.upc.dsa.exceptions.UserAlreadyExistsException;
 
 import edu.upc.dsa.exceptions.UserNotFoundException;
+import edu.upc.dsa.models.Game;
+import edu.upc.dsa.models.Player;
+import edu.upc.dsa.models.Relation;
 import edu.upc.dsa.models.User;
 
 import org.apache.log4j.Logger;
 
+import javax.print.DocFlavor;
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 import static java.sql.Types.*;
@@ -186,5 +193,172 @@ public class SessionImpl implements Session {
                 res.add(object);
             }
             return res;
+    }
+
+    @Override
+    public int findLastId(Class theClass) throws Exception {
+        int res;
+        ResultSet rs;
+        String query;
+
+        query = "SELECT MAX(id) FROM pochaDB."+theClass.getSimpleName();
+        PreparedStatement prep = this.connection.prepareStatement(query);
+        prep.execute();
+        rs = prep.getResultSet();
+
+        log.info("query (find): " + query);
+
+        rs.next();
+        res = rs.getInt(1);
+
+        return res;
+    }
+
+    @Override
+    public List<Game> findGamesIdByUserId(int idUser) throws Exception {
+        List<Game> list = new LinkedList<>();
+        ResultSet rs;
+        String query;
+        Game game;
+
+        query = "SELECT pochaDB.Game.*"
+        + " FROM pochaDB.User,pochaDB.Game,pochaDB.Relation"
+        + " WHERE pochaDB.User.id="
+        + idUser
+        + " AND pochaDB.User.id=pochaDB.Relation.idUser"
+        + " AND pochaDB.Relation.idGame=pochaDB.Game.id"
+        + " ORDER BY id ASC";
+        PreparedStatement prep = this.connection.prepareStatement(query);
+        prep.execute();
+        rs = prep.getResultSet();
+
+        log.info("query (find): " + query);
+
+        while (rs.next()) {
+
+            log.info("Creating game...");
+            game = Game.class.newInstance();
+            log.info("Object created");
+            for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
+                String columnName = rs.getMetaData().getColumnName(i);
+                columnName = columnName.substring(0, 1).toUpperCase() + columnName.substring(1);
+
+                log.info("Column name: " + columnName);
+
+                switch (rs.getMetaData().getColumnType(i)) {
+                    case INTEGER:
+                        int intValue = rs.getInt(i);
+                        Game.class.getMethod("set" + columnName, int.class).invoke(game, intValue);
+                        log.info("set" + columnName);
+                        break;
+                    case VARCHAR:
+                        String stringValue = rs.getString(i);
+                        Game.class.getMethod("set" + columnName, String.class).invoke(game, stringValue);
+                        log.info("set" + columnName);
+                        break;
+                    case TIMESTAMP:
+                        Timestamp dateValue = rs.getTimestamp(i);
+                        Game.class.getMethod("set" + columnName, Timestamp.class).invoke(game, dateValue);
+                        break;
+                    case BOOLEAN:
+                        Boolean booleanValue = rs.getBoolean(i);
+                        Game.class.getMethod("set" + columnName, Boolean.class).invoke(game, booleanValue);
+                        break;
+                    default:
+                        log.info("Missing type: " + rs.getMetaData().getColumnType(i));
+                        break;
+                }
+            }
+            log.info("Object founded: " + game);
+            list.add(game);
+        }
+        if(list.size()==0) throw new EmptyGameListException();
+        return list;
+    }
+
+    @Override
+    public List<Player> findPlayersByGameId(int idGame) throws Exception {
+        List<Player> list = new LinkedList<>();
+        ResultSet rs;
+        String query;
+        Player player;
+
+        query = "SELECT pochaDB.User.username,pochaDB.Relation.points"
+        + " FROM pochaDB.User,pochaDB.Relation,pochaDB.Game"
+        + " WHERE pochaDB.Game.id="
+        + idGame
+        + " AND pochaDB.User.id=pochaDB.Relation.idUser"
+        + " AND pochaDB.Relation.idGame=pochaDB.Game.id"
+        + " ORDER BY pochaDB.Relation.points DESC";
+        PreparedStatement prep = this.connection.prepareStatement(query);
+        prep.execute();
+        rs = prep.getResultSet();
+
+        log.info("query (find): " + query);
+
+        while (rs.next()) {
+
+            log.info("Creating player...");
+            player = Player.class.newInstance();
+            log.info("Player created");
+
+            for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
+                String columnName = rs.getMetaData().getColumnName(i);
+                columnName = columnName.substring(0, 1).toUpperCase() + columnName.substring(1);
+
+                log.info("Column name: " + columnName);
+
+                switch (rs.getMetaData().getColumnType(i)) {
+                    case INTEGER:
+                        int intValue = rs.getInt(i);
+                        Player.class.getMethod("set" + columnName, int.class).invoke(player, intValue);
+                        log.info("set" + columnName);
+                        break;
+                    case VARCHAR:
+                        String stringValue = rs.getString(i);
+                        Player.class.getMethod("set" + columnName, String.class).invoke(player, stringValue);
+                        log.info("set" + columnName);
+                        break;
+                    case TIMESTAMP:
+                        Timestamp dateValue = rs.getTimestamp(i);
+                        Player.class.getMethod("set" + columnName, Timestamp.class).invoke(player, dateValue);
+                        break;
+                    case BOOLEAN:
+                        Boolean booleanValue = rs.getBoolean(i);
+                        Player.class.getMethod("set" + columnName, Boolean.class).invoke(player, booleanValue);
+                        break;
+                    default:
+                        log.info("Missing type: " + rs.getMetaData().getColumnType(i));
+                        break;
+                }
+            }
+            log.info("Object founded: " + player);
+            list.add(player);
+        }
+        if(list.size()==0) throw new EmptyGameListException();
+        return list;
+    }
+
+    @Override
+    public List<String> searchUser(String piece) throws Exception {
+        List<String> list = new LinkedList<>();
+        ResultSet rs;
+        String query;
+        String username;
+
+        query = "SELECT pochaDB.User.username FROM pochaDB.User WHERE pochaDB.User.username LIKE '" + piece + "%'";
+        PreparedStatement prep = this.connection.prepareStatement(query);
+        prep.execute();
+        rs = prep.getResultSet();
+
+        log.info("query (search user): " + query);
+
+        while (rs.next()) {
+            String stringValue = rs.getString(1);
+            list.add(stringValue);
+        }
+
+        if(list.size()==0) throw new EmptyUserListException();
+        return list;
     }
 }

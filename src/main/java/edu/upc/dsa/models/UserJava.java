@@ -11,6 +11,7 @@ public class UserJava {
     private String surname;
     private String mail;
     private int age;
+    private Boolean upToDate;
     private List<GameJava> games = new LinkedList<>();
 
     public UserJava() {
@@ -24,6 +25,7 @@ public class UserJava {
         this.surname = surname;
         this.mail = mail;
         this.age = age;
+        this.upToDate = false;
     }
 
     public int getId() {
@@ -80,6 +82,14 @@ public class UserJava {
 
     public void setAge(int age) {
         this.age = age;
+    }
+
+    public Boolean getUpToDate() {
+        return upToDate;
+    }
+
+    public void setUpToDate(Boolean upToDate) {
+        this.upToDate = upToDate;
     }
 
     public List<GameJava> getGames() {
